@@ -72,6 +72,7 @@ module domain_interface
     type(variable_t) :: terrain_u  
     type(variable_t) :: terrain_v
         type(variable_t) :: forcing_terrain  ! BK 05/2020: The forcing terrain interpolated 2d to the hi-res grid. In order to calculate difference in slope
+    type(variable_t) :: jacobian  ! jacobian matrix of the coordinate trasnformation
     type(variable_t) :: u_10m
     type(variable_t) :: v_10m
     type(variable_t) :: temperature_2m
@@ -135,6 +136,7 @@ module domain_interface
     real,                       allocatable :: delta_dzdy(:,:,:) ! change in height difference (between hi and lo-res data) with change in x/y position (used to calculate w_real vertical motions)
     real,                       allocatable :: zfr_u(:,:,:)     ! ratio between z levels (on grid)
     real,                       allocatable :: zfr_v(:,:,:)
+    ! real,                       allocatable :: jacobian(:,:,:)  ! jacobian matrix of the coordinate trasnformation
 
     real,                       allocatable :: ustar(:,:)
     real,                       allocatable :: znu(:)

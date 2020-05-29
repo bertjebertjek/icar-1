@@ -29,12 +29,13 @@ contains
     !! Starts by setting w out of the ground=0 then works through layers
     !!
     !!------------------------------------------------------------
-    subroutine balance_uvw(u,v,w, dz, dx, options)
+    subroutine balance_uvw(u,v,w, dz, dx, options, jacobian)
         implicit none
         real,           intent(inout) :: u(:,:,:), v(:,:,:), w(:,:,:)
         real,           intent(in)    :: dz(:,:,:)
         real,           intent(in)    :: dx
         type(options_t),intent(in)    :: options
+        real,           intent(in)    :: jacobian(:,:,:)
 
         real, allocatable, dimension(:,:) :: du, dv, divergence, rhou, rhov,rhow
         real, allocatable, dimension(:,:,:) :: dzu, dzv
@@ -45,6 +46,7 @@ contains
         !           v => domain%v%data_3d,  &
         !           w => domain%w%data_3d  )
 
+
         ims = lbound(w,1)
         ime = ubound(w,1)
         kms = lbound(w,2)
@@ -53,6 +55,15 @@ contains
         jme = ubound(w,3)
 
         w = 0
+
+        ! if (this_image()==1) then
+        !     write(*,*)  "shape(dz_interface): ", shape(dz_interface)
+        !     write(*,*)  "shape(w ): ", shape(w)
+        !     ! write(*,*), "ims: ", ims
+        !     ! write(*,*), "ime: ", ime
+        ! endif
+
+    
 
         !------------------------------------------------------------
         ! These could be module level to prevent lots of allocation/deallocation/reallocations
@@ -99,8 +110,14 @@ contains
             !   in the East-West direction
             du =  u(ims+2:ime, k, jms+1:jme-1)   * dzu(ims+2:ime, k, jms+1:jme-1)   &
                 - u(ims+1:ime-1, k, jms+1:jme-1) * dzu(ims+1:ime-1, k, jms+1:jme-1)
+            
             !   in net
-            divergence = du + dv
+            ! divergence = du + dv
+
+            ! ---------- correcting for spatially varying dz transformation:  -----------
+            ! divergence = (du + dv) * dz_interface(ims+1:ime-1, k, jms+1:jme-1) / options%parameters%dz_levels(k)   !domain%dz_interface%data_3d
+            divergence = (du + dv) * jacobian(ims+1:ime-1, k, jms+1:jme-1)  
+
 
             ! Then calculate w to balance
             if (k==kms) then
@@ -228,8 +245,8 @@ contains
             ! else assumes even flow over the mountains
 
             ! use horizontal divergence (convergence) to calculate vertical convergence (divergence)
-            call balance_uvw(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%advection_dz, domain%dx, options)
-
+            ! call balance_uvw(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%advection_dz, domain%dx, options)
+            call balance_uvw(domain%u%data_3d, domain%v%data_3d, domain%w%data_3d, domain%advection_dz, domain%dx, options, domain%jacobian%data_3d) !domain%dz_interface%data_3d)
         else
 
             ! rotate winds from cardinal directions to grid orientation (e.g. u is grid relative not truly E-W)
@@ -255,7 +272,8 @@ contains
                              domain% w %meta_data%dqdt_3d,      &
                              domain% advection_dz,              &
                              domain% dx,                        &
-                             options)
+                             options,      &
+                             domain%jacobian%data_3d ) ! domain% dz_interface%data_3d)
 
         endif
 

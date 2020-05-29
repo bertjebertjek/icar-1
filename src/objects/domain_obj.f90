@@ -188,6 +188,7 @@ contains
         if (0<opt%vars_to_allocate( kVARS%z) )                          call setup(this%z,                        this%grid )
         if (0<opt%vars_to_allocate( kVARS%dz_interface) )               call setup(this%dz_interface,             this%grid )
         if (0<opt%vars_to_allocate( kVARS%z_interface) )                call setup(this%z_interface,              this%grid )
+        if (0<opt%vars_to_allocate( kVARS%z_interface) )                call setup(this%jacobian,              this%grid )
         if (0<opt%vars_to_allocate( kVARS%dz) )                         call setup(this%dz_mass,                  this%grid )
         if (0<opt%vars_to_allocate( kVARS%density) )                    call setup(this%density,                  this%grid )
         if (0<opt%vars_to_allocate( kVARS%pressure_interface) )         call setup(this%pressure_interface,       this%grid )
@@ -734,6 +735,10 @@ contains
                              this%v_grid%       kms : this%v_grid%       kme,   &
                              this%v_grid2d_ext% jms : this%v_grid2d_ext% jme) )
 
+        ! allocate(this%jacobian( this% ims : this% ime, &
+        !                         this% kms : this% kme, &
+        !                         this% jms : this% jme) )
+
 
     end subroutine allocate_z_arrays
 
@@ -749,7 +754,7 @@ contains
         class(domain_t), intent(inout)  :: this
         type(options_t), intent(in)     :: options
 
-        real, allocatable :: temp(:,:,:) !, terrain_u(:,:), terrain_v(:,:)
+        real, allocatable :: temp(:,:,:) !, jacobian(:,:,:) !, terrain_u(:,:), terrain_v(:,:)
         integer :: i
         real :: smooth_height, H, s, n
         logical :: SLEVE  
@@ -781,6 +786,7 @@ contains
                   global_z_level_ratio  => this%global_z_level_ratio,           &
                   dzdx                  => this%dzdx,                           &
                   dzdy                  => this%dzdy,                           &
+                  jacobian              => this%jacobian%data_3d,               &
                   dz_scl                => this%dz_scl,                         &
                   H                     => this%H,                              &
                   max_level             => this%max_level,                      &
@@ -792,7 +798,7 @@ contains
           ! _________ SLEVE simple Implementation  _______________________
           if (options%parameters%sleve) then  
             ! This basically entails 2 transformations: First a linear one so that dz ranges from 0 to smooth_height H. 
-            ! (boundary cnd (3) in Schär et al 2002)  Next, the nonlinear SLEVE transformation 
+            ! (boundary cnd (3) in Schär et al 2002)  Next, the nonlinear SLEVE (or hybrid) transformation 
             !  eqn (2) from Leuenberger et al 2009 z_sleve = Z + terrain * sinh((H/s)**n - (Z/s)**n) / SINH((H/s)**n)
             ! Here H is the model top or (flat_z_height in m), s controls how fast the terrain decays 
             ! and n controls the compression throughout the column (this last factor was added by Leuenberger et al 2009)
@@ -827,6 +833,7 @@ contains
               print*, ""
             endif
 
+ 
 
             i=kms 
             
@@ -852,6 +859,9 @@ contains
             ! BK: So if z_u is already offset in the u dir, but not in the z dir, we can say that
             !     z_u(:,1,:) is the terrain on the u grid, and it needs to be offset in the z-dir 
             !     to reach mass levels (so by dz[i]/2)
+
+            print*,"shape(terrain_u) ",shape(terrain_u)
+            print*,"shape(z_u(:,i,:)) ",shape(z_u(:,i,:))
 
             terrain_u =  z_u(:,i,:)  ! save for later on. 
             terrain_v =  z_v(:,i,:)  ! save for later on 
@@ -883,6 +893,12 @@ contains
                       dz_interface(:,i,:)  = z_interface(:,i+1,:) - z_interface(:,i,:)  
 
                     endif
+
+                  !  experimental ... maybe sum(dz_scl(1:(i-1))) + dz_scl(i)/2) ???
+                    jacobian(:,i,:) = 1 - terrain*n/s * COSH( (H/s)**n - (sum(dz_scl(1:i))/s)**n ) / SINH((H/s)**n) &
+                                    * (sum(dz_scl(1:i))/s)**(n-1)
+
+
                    
                     z_level_ratio(:,i,:) = dz_interface(:,i,:) / dz_scl(i)
 
@@ -947,6 +963,8 @@ contains
                 smooth_height = sum(global_terrain) / size(global_terrain) + sum(dz(1:max_level))
 
                 z_level_ratio(:,i,:) = (smooth_height - terrain) / sum(dz(1:max_level))
+                ! z_level_ratio(:,i,:) = (smooth_height - terrain-forcing_terrain) / sum(dz(1:max_level))  ! to delta_terrain formulation for non-sleve option
+
                 global_z_level_ratio(:,i,:) = (smooth_height - global_terrain) / sum(dz(1:max_level))
 
                 zr_u(:,i,:) = (smooth_height - z_u(:,i,:)) / sum(dz(1:max_level))
@@ -1016,6 +1034,7 @@ contains
             ! z_interface(:,i,:) = z_interface(:,i-1,:) + dz_interface(:,i-1,:)
             ! dz_mass(:,i,:)     = dz(i-1)/2 * z_level_ratio(:,i-1,:)
           call io_write("zr_u.nc", "zr_u", zr_u(:,:,:) )  
+          call io_write("jacobian.nc", "jacobian", jacobian(:,:,:) )
     
         end associate
 
@@ -1279,10 +1298,24 @@ contains
         implicit none
         class(domain_t), intent(inout) :: this
         type(options_t), intent(in)    :: options
+        character*60 :: a_string
 
         call this%info%add_attribute("comment",options%parameters%comment)
         call this%info%add_attribute("source","ICAR version:"//trim(options%parameters%version))
 
+        write(a_string,*) options%parameters%space_varying_dz 
+        call this%info%add_attribute("space_varying_dz",a_string)
+        write(a_string,*) options%parameters%sleve
+        call this%info%add_attribute("sleve",a_string)
+        if (options%parameters%sleve) then
+          write(a_string,*) options%parameters%sleve_decay_factor
+          call this%info%add_attribute("sleve_decay_factor",a_string )
+          write(a_string,*) options%parameters%sleve_n
+          call this%info%add_attribute("sleve_n",a_string )
+        endif  
+        ! if(options%physics%windtype==kCONSERVE_MASS .and. options%parameters%use_terrain_difference )then
+          ! call this%info%add_attribute("terrain_difference for wind acceleration:",options%parameters%use_terrain_difference )
+        ! endif  
         call this%info%add_attribute("ids",str(this%grid%ids))
         call this%info%add_attribute("ide",str(this%grid%ide))
         call this%info%add_attribute("jds",str(this%grid%jds))
@@ -1926,29 +1959,34 @@ contains
     
         !_________ 2. Calculate the ratio bewteen z levels from hi-res and forcing data for wind acceleration  _________                                
 
-        ! offset forcint terrain:
+        ! offset forcing terrain:
         allocate(forcing_terrain_u( this%u_grid2d_ext% ims : this%u_grid2d_ext% ime,   &
                                     this%u_grid2d_ext% jms : this%u_grid2d_ext% jme) )
         call array_offset_x(this%forcing_terrain%data_2d, forcing_terrain_u)
         
-        ! print* , "  hgt variable forcing_terrain offset x: ", shape(forcing_terrain_u)
         ! call io_write("forcing_terrain_u.nc", "forcing_terrain_u", forcing_terrain_u(:,:) ) ! check in plot
 
         allocate(forcing_terrain_v( this%v_grid2d_ext% ims : this%v_grid2d_ext% ime,   &
                                     this%v_grid2d_ext% jms : this%v_grid2d_ext% jme) )
         call array_offset_y(this%forcing_terrain%data_2d, forcing_terrain_v)
-        ! print* , "  hgt variable forcing_terrain offset y: ", shape(forcing_terrain_v)
+        
 
         do i = this%grid%kms, this%grid%kme
-          zfr_u(:,i,:) = (1 + terrain_u *  SINH( (H/s)**n - ( sum(dz_scl(1:i)) /s)**n ) / SINH((H/s)**n) / sum(dz(1:i)) )  &  ! officially sum + 1/2 but since we're calculating ratios it is prb ok to approximate like this.
-                       /  (1 + forcing_terrain_u *  SINH( (H/s)**n - ( sum(dz_scl(1:i)) /s)**n ) / SINH((H/s)**n) / sum(dz(1:i)) )
+          zfr_u(:,i,:) = (1 + forcing_terrain_u *  SINH( (H/s)**n - ( sum(dz_scl(1:i)) /s)**n ) / SINH((H/s)**n) / sum(dz(1:i)) )  &  ! officially sum + 1/2 but since we're calculating ratios it is prb ok to approximate like this.
+                      /  (1 + terrain_u *  SINH( (H/s)**n - ( sum(dz_scl(1:i)) /s)**n ) / SINH((H/s)**n) / sum(dz(1:i)) )
           
-          zfr_v(:,i,:) = (1 + terrain_v *  SINH( (H/s)**n - ( sum(dz_scl(1:i)) /s)**n ) / SINH((H/s)**n) / sum(dz(1:i)) )  &  ! officially sum + 1/2 
-                       /  (1 + forcing_terrain_v *  SINH( (H/s)**n - ( sum(dz_scl(1:i)) /s)**n ) / SINH((H/s)**n) /sum(dz(1:i)) )
+          zfr_v(:,i,:) = (1 + forcing_terrain_v *  SINH( (H/s)**n - ( sum(dz_scl(1:i)) /s)**n ) / SINH((H/s)**n) / sum(dz(1:i)) )  &  ! officially sum + 1/2 
+                       /  (1 + terrain_v *  SINH( (H/s)**n - ( sum(dz_scl(1:i)) /s)**n ) / SINH((H/s)**n) /sum(dz(1:i)) )
                               
         enddo 
 
+        ! tuning
+        ! zfr_u(:,:,:) = 1. / SQRT(zfr_u(:,:,:) )
+        ! zfr_v(:,:,:) = 1. / SQRT(zfr_v(:,:,:) )
+        ! zfr_u(:,:,:) = 1. / zfr_u(:,:,:) 
+        ! zfr_v(:,:,:) = 1. / zfr_v(:,:,:)  ! reversed eq directly
 
+        ! ____________________________________________________________________________________________________________
                 ! write and compare 
         ! if ((this_image()==1).and.(options%parameters%debug)) then  ! Print some diagnostics. USeful for development.         
           if ((this_image()==1)) then  ! Print some diagnostics. USeful for development.         
