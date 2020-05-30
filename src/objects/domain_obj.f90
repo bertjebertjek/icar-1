@@ -212,8 +212,8 @@ contains
         if (0<opt%vars_to_allocate( kVARS%v_longitude) )                call setup(this%v_longitude,              this%v_grid2d)
         if (0<opt%vars_to_allocate( kVARS%terrain) )                    call setup(this%terrain,                  this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%terrain) )                    call setup(this%forcing_terrain,          this%grid2d,    forcing_var=opt%parameters%hgtvar, list=this%variables_to_force)
-        if (0<opt%vars_to_allocate( kVARS%terrain) )                    call setup(this%terrain_u,                this%u_grid2d) 
-        if (0<opt%vars_to_allocate( kVARS%terrain) )                    call setup(this%terrain_v,                this%v_grid2d)
+        ! if (0<opt%vars_to_allocate( kVARS%terrain) )                    call setup(this%terrain_u,                this%u_grid2d) 
+        ! if (0<opt%vars_to_allocate( kVARS%terrain) )                    call setup(this%terrain_v,                this%v_grid2d)
         if (0<opt%vars_to_allocate( kVARS%sensible_heat) )              call setup(this%sensible_heat,            this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%latent_heat) )                call setup(this%latent_heat,              this%grid2d)
         if (0<opt%vars_to_allocate( kVARS%u_10m) )                      call setup(this%u_10m,                    this%grid2d)
@@ -739,6 +739,10 @@ contains
         !                         this% kms : this% kme, &
         !                         this% jms : this% jme) )
 
+        allocate(this%terrain_u( this%u_grid2d_ext% ims : this%u_grid2d_ext% ime,   &
+                                 this%u_grid2d_ext% jms : this%u_grid2d_ext% jme) )
+        allocate(this%terrain_v( this%v_grid2d_ext% ims : this%v_grid2d_ext% ime,   &
+                                 this%v_grid2d_ext% jms : this%v_grid2d_ext% jme) )
 
     end subroutine allocate_z_arrays
 
@@ -754,7 +758,7 @@ contains
         class(domain_t), intent(inout)  :: this
         type(options_t), intent(in)     :: options
 
-        real, allocatable :: temp(:,:,:) !, jacobian(:,:,:) !, terrain_u(:,:), terrain_v(:,:)
+        real, allocatable :: temp(:,:,:), terrain_u(:,:), terrain_v(:,:) !, jacobian(:,:,:) !
         integer :: i
         real :: smooth_height, H, s, n
         logical :: SLEVE  
@@ -777,8 +781,8 @@ contains
                   dz_mass               => this%dz_mass%data_3d,                &
                   dz_interface          => this%dz_interface%data_3d,           &
                   terrain               => this%terrain%data_2d,                &
-                  terrain_u             => this%terrain_u%data_2d,              &
-                  terrain_v             => this%terrain_v%data_2d,              &
+                  terrain_u             => this%terrain_u ,             &
+                  terrain_v             => this%terrain_v,              &
                   forcing_terrain       => this%forcing_terrain%data_2d,        &
                   global_z_interface    => this%global_z_interface,             &
                   global_dz_interface   => this%global_dz_interface,            &
@@ -860,18 +864,14 @@ contains
             !     z_u(:,1,:) is the terrain on the u grid, and it needs to be offset in the z-dir 
             !     to reach mass levels (so by dz[i]/2)
 
-            print*,"shape(terrain_u) ",shape(terrain_u)
-            print*,"shape(z_u(:,i,:)) ",shape(z_u(:,i,:))
-
             terrain_u =  z_u(:,i,:)  ! save for later on. 
             terrain_v =  z_v(:,i,:)  ! save for later on 
- 
+
             ! Offset analogous to: z_u(:,i,:) = z_u(:,i,:) + dz(i) / 2 * zr_u(:,i,:)
             z_u(:,i,:)  = dz_scl(i)/2  &
                           + terrain_u  *  SINH( (H/s)**n - ( dz_scl(i)/2 /s)**n ) / SINH((H/s)**n)                                        
             z_v(:,i,:)  = dz_scl(i)/2   & 
                           + terrain_v  *  SINH( (H/s)**n - ( dz_scl(i)/2 /s)**n ) / SINH((H/s)**n)                                        
-
 
             zr_u(:,i,:)  =  (z_u(:,i,:) - terrain_u) / ( dz_scl(i)/2 )
             zr_v(:,i,:)  =  (z_v(:,i,:) - terrain_v) / (dz_scl(i)/2 )
@@ -1839,8 +1839,8 @@ contains
                   jms => this%jms,      jme => this%jme,                        &
                   kms => this%kms,      kme => this%kme,                        &
                   terrain               => this%terrain%data_2d,                &
-                  terrain_u             => this%terrain_u%data_2d,              &
-                  terrain_v             => this%terrain_v%data_2d,              &
+                  terrain_u             => this%terrain_u,    &  !%data_2d,              &
+                  terrain_v             => this%terrain_v,    &  !%data_2d,              &
                   forcing_terrain       => this%forcing_terrain%data_2d,        &
                   n                     =>  options%parameters%sleve_n,         & 
                   dz                    => options%parameters%dz_levels,        &

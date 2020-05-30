@@ -112,11 +112,11 @@ contains
                 - u(ims+1:ime-1, k, jms+1:jme-1) * dzu(ims+1:ime-1, k, jms+1:jme-1)
             
             !   in net
-            ! divergence = du + dv
+            divergence = du + dv
 
             ! ---------- correcting for spatially varying dz transformation:  -----------
             ! divergence = (du + dv) * dz_interface(ims+1:ime-1, k, jms+1:jme-1) / options%parameters%dz_levels(k)   !domain%dz_interface%data_3d
-            divergence = (du + dv) * jacobian(ims+1:ime-1, k, jms+1:jme-1)  
+            ! divergence = (du + dv) * jacobian(ims+1:ime-1, k, jms+1:jme-1)  
 
 
             ! Then calculate w to balance

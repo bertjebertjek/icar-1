@@ -69,8 +69,8 @@ module domain_interface
     type(variable_t) :: longwave
     type(variable_t) :: shortwave
     type(variable_t) :: terrain
-    type(variable_t) :: terrain_u  
-    type(variable_t) :: terrain_v
+    ! type(variable_t) :: terrain_u  
+    ! type(variable_t) :: terrain_v
         type(variable_t) :: forcing_terrain  ! BK 05/2020: The forcing terrain interpolated 2d to the hi-res grid. In order to calculate difference in slope
     type(variable_t) :: jacobian  ! jacobian matrix of the coordinate trasnformation
     type(variable_t) :: u_10m
@@ -137,6 +137,8 @@ module domain_interface
     real,                       allocatable :: zfr_u(:,:,:)     ! ratio between z levels (on grid)
     real,                       allocatable :: zfr_v(:,:,:)
     ! real,                       allocatable :: jacobian(:,:,:)  ! jacobian matrix of the coordinate trasnformation
+    real,                       allocatable :: terrain_u(:,:)
+    real,                       allocatable :: terrain_v(:,:)
 
     real,                       allocatable :: ustar(:,:)
     real,                       allocatable :: znu(:)
