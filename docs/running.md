@@ -57,3 +57,15 @@ Must [optionally] contain:
     [SOIL]  = Soil type classification for land surface model
 
 Must be in a (nearly) constant dx,dy projection (e.g. Lambert Conformal Conic)
+
+3) (Optional) External files: in case starting conditions are to be set (e.g. Snow depth, soil temperature), external files can be used to define these. These can be measurements, or often just the first forcing file from which state variables are read in. 
+    
+    [optionally] contain:
+
+    [lat_ext]      =  Lattitude on mass grid
+    [lon_ext]      =  Longitude on mass grid
+    [swe_ext]      =  snow water equivalent  (kg m-2)
+    [rho_snow_ext] =  snow density (will otherwise be computed by Noah?) (kg m-3)
+    [tsoil2D_ext]  =  Soil temperature (for all soil)     (K)     ! N.B. This will overwrite any input from soil_t_var or soil_deept_var  !!
+    [tsoil3D_ext]  =  Soil temperature (per soil layer)   (K)          ! N.B. This will overwrite any input from soil_t_var or soil_deept_var  !!
+
